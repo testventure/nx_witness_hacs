@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to NX Witness",
+        "description": "Enter your NX Witness server details",
+        "data": {
+          "host": "Host (e.g., 192.168.1.100 or 192.168.1.100:7001)",
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to NX Witness server. Please check the host, username, and password.",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This NX Witness server is already configured"
+    }
+  }
+}

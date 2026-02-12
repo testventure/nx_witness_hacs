@@ -1,0 +1,8 @@
+{
+  "name": "NX Witness",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["camera"],
+  "iot_class": "Local Polling",
+  "homeassistant": "2024.1.0"
+}
