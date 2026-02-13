@@ -38,7 +38,7 @@ class NXWitnessClient:
                 json=data,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
-                if response.status == 201:
+                if response.status in [200, 201]:  # Accept both 200 and 201
                     result = await response.json()
                     self.token = result.get("token")
                     _LOGGER.info("Login successful, token obtained")
