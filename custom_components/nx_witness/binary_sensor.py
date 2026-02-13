@@ -87,6 +87,47 @@ class NXWitnessObjectSensor(CoordinatorEntity, BinarySensorEntity):
 
         self._last_detection_time = None
 
+    def _track_matches_sensor(self, track: dict[str, Any]) -> bool:
+        """Return True when a track belongs to this camera/object sensor."""
+        track_camera_id = (
+            track.get("deviceId")
+            or track.get("cameraId")
+            or track.get("resourceId")
+        )
+        if track_camera_id != self._camera_id:
+            return False
+
+        track_object_type = str(track.get("objectTypeId") or "")
+        if track_object_type == self._object_type_id:
+            return True
+
+        # Some systems/analytics engines can return alternate object type ids.
+        # Fallback to matching by object name to avoid dropping valid detections.
+        return self._object_name.lower() in track_object_type.lower()
+
+    def _extract_track_timestamp_ms(self, track: dict[str, Any]) -> int:
+        """Extract a best-effort detection timestamp from an object track."""
+        timestamp_fields = (
+            "lastAppearanceTimeMs",
+            "endTimeMs",
+            "startTimeMs",
+            "timestampMs",
+        )
+
+        for field in timestamp_fields:
+            value = track.get(field)
+            if isinstance(value, (int, float)):
+                return int(value)
+
+        time_period = track.get("timePeriod")
+        if isinstance(time_period, dict):
+            for field in ("endTimeMs", "startTimeMs"):
+                value = time_period.get(field)
+                if isinstance(value, (int, float)):
+                    return int(value)
+
+        return 0
+
     @property
     def is_on(self) -> bool:
         """Return true if object detected recently."""
@@ -98,18 +139,16 @@ class NXWitnessObjectSensor(CoordinatorEntity, BinarySensorEntity):
         
         now = datetime.now()
         cutoff_time_ms = int((now - timedelta(seconds=OBJECT_TRACK_TIMEOUT)).timestamp() * 1000)
-        
+
         for track in tracks:
-            # Check if track is for this camera and object type
-            if (
-                track.get("deviceId") == self._camera_id
-                and track.get("objectTypeId") == self._object_type_id
-            ):
-                last_appearance = track.get("lastAppearanceTimeMs", 0)
-                if last_appearance >= cutoff_time_ms:
-                    self._last_detection_time = datetime.fromtimestamp(last_appearance / 1000)
-                    return True
-        
+            if not self._track_matches_sensor(track):
+                continue
+
+            track_timestamp = self._extract_track_timestamp_ms(track)
+            if track_timestamp >= cutoff_time_ms:
+                self._last_detection_time = datetime.fromtimestamp(track_timestamp / 1000)
+                return True
+
         return False
 
     @property
