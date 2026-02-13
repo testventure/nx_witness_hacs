@@ -1,7 +1,7 @@
 """DataUpdateCoordinator for NX Witness."""
 import logging
 import ssl
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import aiohttp
 
@@ -31,6 +31,8 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
         self.password = password
         self.client = None
         self.cameras = []
+        self.object_tracks = []
+        self.last_track_check = datetime.now()
         self._session = None
 
         super().__init__(
@@ -71,18 +73,25 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Update data via library."""
         try:
+            from .const import OBJECT_TRACK_INTERVAL
+            
             # Get cameras
             cameras = await self.client.get_cameras()
             self.cameras = cameras
             
+            # Check for object tracks more frequently
+            now = datetime.now()
+            if (now - self.last_track_check).total_seconds() >= OBJECT_TRACK_INTERVAL:
+                # Get tracks from last minute
+                start_time_ms = int((now - timedelta(minutes=1)).timestamp() * 1000)
+                tracks = await self.client.get_object_tracks(start_time_ms)
+                self.last_track_check = now
+                self.object_tracks = tracks
+            
             return {
                 "cameras": cameras,
+                "object_tracks": self.object_tracks,
             }
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with NX Witness: {err}") from err
-
-    async def async_shutdown(self):
-        """Cleanup on shutdown."""
-        if self._session and not self._session.closed:
-            await self._session.close()

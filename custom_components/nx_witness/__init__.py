@@ -11,7 +11,7 @@ from .coordinator import NXWitnessDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.CAMERA]
+PLATFORMS = [Platform.CAMERA, Platform.BINARY_SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
