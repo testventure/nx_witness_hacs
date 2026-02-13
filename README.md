@@ -4,17 +4,17 @@ Simple integration to add NX Witness cameras to Home Assistant.
 
 ## Features
 
-- ✅ Automatic camera discovery
-- ✅ Live camera snapshots
-- ✅ Video streaming support
-- ✅ Simple username/password setup
+- Automatic camera discovery
+- Live camera snapshots
+- Video streaming support
+- Simple username/password setup
 
 ## Installation
 
 ### Via HACS (Custom Repository)
 
 1. Open HACS → Integrations
-2. Click ⋮ menu → Custom repositories
+2. Click the three-dot menu → Custom repositories
 3. Add: `https://github.com/msupczenski/nx_witness_hacs`
 4. Category: Integration
 5. Click "Download"
@@ -31,12 +31,12 @@ Simple integration to add NX Witness cameras to Home Assistant.
 2. Click "+ Add Integration"
 3. Search for "NX Witness"
 4. Enter:
-   - **Host**: Your NX Witness server (e.g., `10.0.0.230` or `10.0.0.230:7001`)
+   - **Host**: Must be in format `https://IP_ADDRESS:7001` (e.g., `https://192.168.1.100:7001`)
    - **Username**: Your NX Witness username
    - **Password**: Your NX Witness password
 5. Click Submit
 
-All cameras will be automatically discovered!
+All cameras will be automatically discovered.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ All cameras will be automatically discovered!
 - Verify NX Witness server is running
 - Check that credentials are correct
 - Ensure port 7001 is accessible
-- Try with format: `https://10.0.0.230:7001`
+- Host must be in format: `https://192.168.1.100:7001` (including https:// and :7001)
 
 **Cameras Not Appearing:**
 - Check Home Assistant logs
