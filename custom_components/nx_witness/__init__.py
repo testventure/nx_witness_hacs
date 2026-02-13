@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
 from .coordinator import NXWitnessDataUpdateCoordinator
@@ -31,6 +32,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not coordinator.last_update_success:
         raise ConfigEntryNotReady
+
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, coordinator.host)},
+        manufacturer="Network Optix",
+        model="NX Witness Server",
+        name="NX Witness",
+    )
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
