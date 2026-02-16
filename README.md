@@ -7,6 +7,7 @@ Simple integration to add NX Witness cameras to Home Assistant.
 - Automatic camera discovery
 - Live camera snapshots
 - Video streaming support
+- Dynamic event sensors from `/rest/v4/events/log`
 - Simple username/password setup
 
 ## Installation
@@ -62,8 +63,7 @@ All cameras will be automatically discovered.
 Current version: 0.1.0 (Camera support only)
 
 Coming soon:
-- Motion detection sensors
-- Analytics event support
+- Additional event metadata
 
 ## License
 

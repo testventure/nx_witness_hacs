@@ -154,6 +154,49 @@ class NXWitnessClient:
             _LOGGER.error("Error getting server info: %s", ex)
             return {}
 
+
+    async def get_event_log(
+        self,
+        start_time_ms: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get events from NX Witness event log."""
+        if not self.token:
+            if not await self.login():
+                return []
+
+        try:
+            url = f"{self.host}/rest/v4/events/log"
+            headers = {"Authorization": f"Bearer {self.token}"}
+            params: dict[str, int] = {}
+
+            if start_time_ms is not None:
+                params["startTimeMs"] = start_time_ms
+
+            async with self.session.get(
+                url,
+                headers=headers,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if isinstance(data, list):
+                        return data
+                    if isinstance(data, dict):
+                        for key in ("items", "events", "data"):
+                            value = data.get(key)
+                            if isinstance(value, list):
+                                return value
+                    return []
+                if response.status == 401:
+                    if await self.login():
+                        return await self.get_event_log(start_time_ms)
+                _LOGGER.error("Failed to get event log: %s", response.status)
+                return []
+        except Exception as ex:
+            _LOGGER.error("Error getting event log: %s", ex)
+            return []
+
     async def get_object_tracks(
         self,
         start_time_ms: int | None = None,
