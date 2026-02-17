@@ -8,7 +8,7 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, EVENT_LOG_INTERVAL, OBJECT_TRACK_INTERVAL, UPDATE_INTERVAL
+from .const import DOMAIN, EVENT_LOG_INTERVAL, UPDATE_INTERVAL
 from .nx_client import NXWitnessClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,16 +31,14 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
         self.password = password
         self.client = None
         self.cameras = []
-        self.object_tracks = []
         self.events = []
         self.last_camera_check = datetime.min
-        self.last_track_check = datetime.min
         self.last_event_check = datetime.min
         self._session = None
 
         # Keep the coordinator ticking fast enough for event sensors.
         # Camera refresh is throttled separately via UPDATE_INTERVAL.
-        coordinator_interval = min(EVENT_LOG_INTERVAL, OBJECT_TRACK_INTERVAL)
+        coordinator_interval = EVENT_LOG_INTERVAL
 
         super().__init__(
             hass,
@@ -84,11 +82,6 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
                     self.cameras = cameras
                 self.last_camera_check = now
 
-            if (now - self.last_track_check).total_seconds() >= OBJECT_TRACK_INTERVAL:
-                start_time_ms = int((now - timedelta(minutes=1)).timestamp() * 1000)
-                self.object_tracks = await self.client.get_object_tracks(start_time_ms)
-                self.last_track_check = now
-
             if (now - self.last_event_check).total_seconds() >= EVENT_LOG_INTERVAL:
                 start_time_ms = int((now - timedelta(minutes=1)).timestamp() * 1000)
                 self.events = await self.client.get_event_log(start_time_ms)
@@ -96,7 +89,6 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
 
             return {
                 "cameras": self.cameras,
-                "object_tracks": self.object_tracks,
                 "events": self.events,
             }
 
