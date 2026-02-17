@@ -14,7 +14,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, OBJECT_TRACK_TIMEOUT
+from .const import DOMAIN, EVENT_SENSOR_TIMEOUT
 from .coordinator import NXWitnessDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -221,7 +221,7 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         events = self.coordinator.data.get("events", [])
 
         now = datetime.now()
-        cutoff_time_ms = int((now - timedelta(seconds=OBJECT_TRACK_TIMEOUT)).timestamp() * 1000)
+        cutoff_time_ms = int((now - timedelta(seconds=EVENT_SENSOR_TIMEOUT)).timestamp() * 1000)
 
         for event in events:
             if not self._event_matches_sensor(event):
