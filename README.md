@@ -60,7 +60,7 @@ All cameras will be automatically discovered.
 
 ## Version
 
-Current version: 0.1.0 (Camera support only)
+Current version: 0.2.2
 
 Coming soon:
 - Additional event metadata
