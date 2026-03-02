@@ -19,6 +19,92 @@ from .coordinator import NXWitnessDataUpdateCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 
+def _camel_to_snake(name: str) -> str:
+    """Convert CamelCase to snake_case without regex."""
+    result = []
+    for i, ch in enumerate(name):
+        if ch.isupper() and i > 0 and (name[i - 1].islower() or name[i - 1].isdigit()):
+            result.append("_")
+        result.append(ch.lower())
+    return "".join(result)
+
+
+_EVENT_TYPE_MAP: dict[str, str] = {
+    "nx.base.MotionEvent": "motion",
+    "nx.base.InputSignalEvent": "input_signal",
+    "nx.base.NetworkIssueEvent": "network_issue",
+    "nx.base.CameraDisconnectedEvent": "camera_disconnected",
+    "nx.base.CameraIpConflictEvent": "camera_ip_conflict",
+    "nx.base.StorageFailureEvent": "storage_failure",
+    "nx.base.ServerStartedEvent": "server_started",
+    "nx.base.LicenseIssueEvent": "license_issue",
+    "nx.analytics.ObjectDetected": "object_detected",
+    "nx.analytics.BestShot": "best_shot",
+    "nx.stub.SoftTrigger": "soft_trigger",
+    "nx.base.UserDefinedEvent": "user_defined",
+    "nx.base.GenericEvent": "generic",
+}
+
+
+def _clean_event_type(raw_type: str) -> str:
+    """Return a human-readable event type from a raw NX Witness type string."""
+    if not raw_type:
+        return "unknown"
+    if raw_type in _EVENT_TYPE_MAP:
+        return _EVENT_TYPE_MAP[raw_type]
+    for prefix in ("nx.analytics.", "nx.base.", "nx.stub.", "nx."):
+        if raw_type.startswith(prefix):
+            raw_type = raw_type[len(prefix):]
+            break
+    if raw_type.lower().endswith("event"):
+        raw_type = raw_type[:-5]
+    return _camel_to_snake(raw_type) or "unknown"
+
+
+def _extract_object_class(event: dict[str, Any]) -> str | None:
+    """Extract the detected object class from an analytics event."""
+    event_data = event.get("eventData")
+    if not isinstance(event_data, dict):
+        return None
+    object_type_id = event_data.get("objectTypeId")
+    if isinstance(object_type_id, str) and object_type_id:
+        leaf = object_type_id.rsplit(".", 1)[-1]
+        if leaf:
+            return leaf
+    for field in ("objectType", "typeId", "objectClass"):
+        value = event_data.get(field)
+        if isinstance(value, str) and value:
+            return value
+    attributes = event_data.get("attributes")
+    if isinstance(attributes, dict):
+        for field in ("class", "objectClass", "type"):
+            value = attributes.get(field)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _extract_event_description(event: dict[str, Any]) -> str | None:
+    """Extract a human-readable description or message from an event."""
+    event_data = event.get("eventData")
+    sources = (event_data, event) if isinstance(event_data, dict) else (event,)
+    for source in sources:
+        for field in ("description", "message", "caption"):
+            value = source.get(field)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def _extract_event_state(event: dict[str, Any]) -> str:
+    """Return a normalized event state: 'detected' or 'stopped'."""
+    payload = _event_payload(event)
+    raw = str(payload.get("state") or event.get("state") or "").lower().strip()
+    if raw in {"stopped", "stop", "ended", "end", "inactive", "off"}:
+        return "stopped"
+    return "detected"
+
+
 def _event_payload(event: dict[str, Any]) -> dict[str, Any]:
     """Return the nested event payload when available."""
     nested = event.get("eventData")
@@ -153,6 +239,10 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
 
         self._last_detection_time: datetime | None = None
         self._last_event_name: str | None = None
+        self._last_event_type_clean: str | None = None
+        self._last_object_class: str | None = None
+        self._last_event_description: str | None = None
+        self._last_event_state: str | None = None
 
     def _event_matches_sensor(self, event: dict[str, Any]) -> bool:
         """Return True when an event belongs to this camera sensor."""
@@ -185,7 +275,12 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
             event_timestamp = _extract_event_timestamp_ms(event)
             if event_timestamp >= cutoff_time_ms:
                 self._last_detection_time = datetime.fromtimestamp(event_timestamp / 1000)
-                self._last_event_name = _extract_event_name(event)
+                raw_name = _extract_event_name(event)
+                self._last_event_name = raw_name
+                self._last_event_type_clean = _clean_event_type(raw_name)
+                self._last_object_class = _extract_object_class(event)
+                self._last_event_description = _extract_event_description(event)
+                self._last_event_state = _extract_event_state(event)
                 return True
 
         return False
@@ -193,14 +288,24 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
-        attrs = {
-            "camera_id": self._camera_id,
-        }
+        attrs: dict[str, Any] = {"camera_id": self._camera_id}
 
         if self._last_event_name:
-            attrs["last_event_type"] = self._last_event_name
+            attrs["last_event_type"] = self._last_event_name  # kept for backwards compat
 
         if self._last_detection_time:
             attrs["last_detection"] = self._last_detection_time.isoformat()
+
+        if self._last_event_type_clean:
+            attrs["event_type"] = self._last_event_type_clean
+
+        if self._last_object_class:
+            attrs["object_class"] = self._last_object_class
+
+        if self._last_event_description:
+            attrs["event_description"] = self._last_event_description
+
+        if self._last_event_state:
+            attrs["event_state"] = self._last_event_state
 
         return attrs
