@@ -8,7 +8,8 @@ Simple integration to add NX Witness cameras to Home Assistant.
 - Live camera snapshots
 - Video streaming support
 - Dynamic event sensors from `/rest/v4/events/log`
-- Simple username/password setup
+- Enriched event attributes including object class (Person, Vehicle, Face) for analytics events
+- Simple username/password setup — no webhooks or server-side rules needed
 
 ## Installation
 
@@ -58,12 +59,52 @@ All cameras will be automatically discovered.
 - Verify user has camera viewing permissions in NX Witness
 - Reload the integration
 
+## Event Sensor Attributes
+
+Each camera gets a `binary_sensor` entity (e.g. `binary_sensor.camera_1_event`) that turns `on` when an event is detected within the last 30 seconds. The following attributes are available for use in automations and templates:
+
+| Attribute | Example | Description |
+|---|---|---|
+| `camera_id` | `{uuid}` | Internal NX Witness camera ID |
+| `event_type` | `motion` | Human-readable event type |
+| `event_state` | `detected` | `detected` or `stopped` |
+| `event_description` | `Person detected on zone A` | Description from the event (if available) |
+| `object_class` | `Person` | Detected object type for analytics events (if available) |
+| `last_detection` | `2026-03-02T10:00:00` | ISO timestamp of the last event |
+| `last_event_type` | `nx.base.MotionEvent` | Raw NX Witness event type string (kept for backwards compatibility) |
+
+### Example Automation
+
+```yaml
+automation:
+  - alias: "Person detected on front door camera"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.front_door_event
+        to: "on"
+    condition:
+      - condition: template
+        value_template: "{{ state_attr('binary_sensor.front_door_event', 'object_class') == 'Person' }}"
+    action:
+      - service: notify.mobile_app
+        data:
+          message: "Person detected!"
+```
+
+## Changelog
+
+### 0.3.0
+- Enriched event sensor attributes: `event_type`, `event_state`, `event_description`, `object_class`
+- `event_type` is now a clean, human-readable string (e.g. `motion` instead of `nx.base.MotionEvent`)
+- Analytics object detection (Person, Vehicle, Face, etc.) surfaced via `object_class`
+- `last_event_type` retained for backwards compatibility
+
+### 0.2.2
+- Initial release with camera discovery, streaming, and event sensors
+
 ## Version
 
-Current version: 0.2.2
-
-Coming soon:
-- Additional event metadata
+Current version: 0.3.0
 
 ## License
 
