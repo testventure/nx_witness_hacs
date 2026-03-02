@@ -124,6 +124,38 @@ def _extract_camera_id(event: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_event_type_raw(event: dict[str, Any]) -> str:
+    """Extract the raw event type identifier, prioritising type fields over captions."""
+    # Check top-level event first for explicit type identifiers
+    for field in ("eventType", "eventTypeId", "type"):
+        value = event.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    # Fall back to eventData type fields
+    payload = _event_payload(event)
+    if payload is not event:
+        for field in ("eventType", "eventTypeId", "type"):
+            value = payload.get(field)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    # Last resort: name/caption
+    for source in (event, payload):
+        for field in ("name", "caption"):
+            value = source.get(field)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return "Unknown"
+
+
+def _extract_area(event: dict[str, Any]) -> str | None:
+    """Extract the area/zone/rule name from an event (typically the caption)."""
+    for source in (event, _event_payload(event)):
+        value = source.get("caption")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _extract_event_name(event: dict[str, Any]) -> str:
     """Extract user-facing event name."""
     payload = _event_payload(event)
@@ -238,9 +270,9 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         )
 
         self._last_detection_time: datetime | None = None
-        self._last_event_name: str | None = None
         self._last_event_type_clean: str | None = None
-        self._last_object_class: str | None = None
+        self._last_classification: str | None = None
+        self._last_area: str | None = None
         self._last_event_description: str | None = None
         self._last_event_state: str | None = None
 
@@ -275,10 +307,9 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
             event_timestamp = _extract_event_timestamp_ms(event)
             if event_timestamp >= cutoff_time_ms:
                 self._last_detection_time = datetime.fromtimestamp(event_timestamp / 1000)
-                raw_name = _extract_event_name(event)
-                self._last_event_name = raw_name
-                self._last_event_type_clean = _clean_event_type(raw_name)
-                self._last_object_class = _extract_object_class(event)
+                self._last_event_type_clean = _clean_event_type(_extract_event_type_raw(event))
+                self._last_classification = _extract_object_class(event)
+                self._last_area = _extract_area(event)
                 self._last_event_description = _extract_event_description(event)
                 self._last_event_state = _extract_event_state(event)
                 return True
@@ -290,17 +321,17 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         """Return additional attributes."""
         attrs: dict[str, Any] = {"camera_id": self._camera_id}
 
-        if self._last_event_name:
-            attrs["last_event_type"] = self._last_event_name  # kept for backwards compat
-
         if self._last_detection_time:
             attrs["last_detection"] = self._last_detection_time.isoformat()
 
         if self._last_event_type_clean:
             attrs["event_type"] = self._last_event_type_clean
 
-        if self._last_object_class:
-            attrs["object_class"] = self._last_object_class
+        if self._last_classification:
+            attrs["classification"] = self._last_classification
+
+        if self._last_area:
+            attrs["area"] = self._last_area
 
         if self._last_event_description:
             attrs["event_description"] = self._last_event_description

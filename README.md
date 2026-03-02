@@ -8,7 +8,7 @@ Simple integration to add NX Witness cameras to Home Assistant.
 - Live camera snapshots
 - Video streaming support
 - Dynamic event sensors from `/rest/v4/events/log`
-- Enriched event attributes including object class (Person, Vehicle, Face) for analytics events
+- Enriched event attributes: `event_type`, `classification` (Person, Vehicle, Face), and `area` (zone/rule name)
 - Simple username/password setup — no webhooks or server-side rules needed
 
 ## Installation
@@ -66,12 +66,12 @@ Each camera gets a `binary_sensor` entity (e.g. `binary_sensor.camera_1_event`) 
 | Attribute | Example | Description |
 |---|---|---|
 | `camera_id` | `{uuid}` | Internal NX Witness camera ID |
-| `event_type` | `motion` | Human-readable event type |
+| `event_type` | `intrusion` | Human-readable event type (e.g. `motion`, `intrusion`, `object_detected`) |
+| `classification` | `Person` | Detected object type for analytics events (if available) |
+| `area` | `Front Yard Intrusion` | Rule/zone name from NX Witness (if available) |
 | `event_state` | `detected` | `detected` or `stopped` |
 | `event_description` | `Person detected on zone A` | Description from the event (if available) |
-| `object_class` | `Person` | Detected object type for analytics events (if available) |
 | `last_detection` | `2026-03-02T10:00:00` | ISO timestamp of the last event |
-| `last_event_type` | `nx.base.MotionEvent` | Raw NX Witness event type string (kept for backwards compatibility) |
 
 ### Example Automation
 
@@ -84,7 +84,7 @@ automation:
         to: "on"
     condition:
       - condition: template
-        value_template: "{{ state_attr('binary_sensor.front_door_event', 'object_class') == 'Person' }}"
+        value_template: "{{ state_attr('binary_sensor.front_door_event', 'classification') == 'Person' }}"
     action:
       - service: notify.mobile_app
         data:
@@ -93,18 +93,24 @@ automation:
 
 ## Changelog
 
+### 0.3.1
+- Split intrusion event attributes into three distinct fields: `event_type`, `classification`, and `area`
+- `event_type` now reflects the actual NX Witness event type ID (e.g. `intrusion`, `motion`) rather than the zone caption
+- `classification` replaces `object_class` (e.g. `Person`, `Vehicle`)
+- New `area` attribute surfaces the rule/zone caption (e.g. `Front Yard Intrusion`)
+- Removed `last_event_type` backwards-compatibility attribute
+
 ### 0.3.0
 - Enriched event sensor attributes: `event_type`, `event_state`, `event_description`, `object_class`
 - `event_type` is now a clean, human-readable string (e.g. `motion` instead of `nx.base.MotionEvent`)
 - Analytics object detection (Person, Vehicle, Face, etc.) surfaced via `object_class`
-- `last_event_type` retained for backwards compatibility
 
 ### 0.2.2
 - Initial release with camera discovery, streaming, and event sensors
 
 ## Version
 
-Current version: 0.3.0
+Current version: 0.3.1
 
 ## License
 
