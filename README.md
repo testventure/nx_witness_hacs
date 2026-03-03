@@ -91,7 +91,161 @@ automation:
           message: "Person detected!"
 ```
 
+## Setting Up Rules in NX Witness
+
+For this integration to receive events, NX Witness must be configured to log them. The integration polls `/rest/v4/events/log` every 5 seconds, so **every rule must write to the log** — otherwise Home Assistant will never see the event.
+
+> **Important:** In every Event Rule, set the action to **Write to Log** with timing **When event starts**. Also enable the **Interval of Action** (e.g. once per 1 minute) to avoid flooding Home Assistant with duplicate events.
+
+### Opening Event Rules
+
+In the NX Witness Desktop Client: **System Administration → Event Rules → Add Rule**
+
+---
+
+### Rule Type 1: Analytics Object Detected (Person / Vehicle / Animal)
+
+Use this rule type to detect specific objects identified by your analytics engine.
+
+| Setting | Value |
+|---|---|
+| WHEN EVENT | `Analytics Object Detected` |
+| Occurs At | Select your cameras |
+| Of Type | `Person`, `Vehicle`, or `Animal` |
+| AND OBJECT | `Has attributes` (leave Attributes blank to match all) |
+| DO ACTION | `Write to Log` → `When event starts` |
+| Interval of Action | Once in 1 Min |
+
+Create one rule per object type (e.g. "Person Object Detection", "Vehicle Object Detection").
+
+**Result in Home Assistant:**
+- `event_type`: `object_detected`
+- `classification`: `Person`, `Vehicle`, or `Animal`
+
+---
+
+### Rule Type 2: Analytics Event — Intrusion Detection
+
+Use this rule type for zone-based intrusion events from analytics plugins (e.g. CVEDIA RT).
+
+| Setting | Value |
+|---|---|
+| WHEN EVENT | `Analytics Event` |
+| Occurs At | Select your cameras |
+| Of Type | `Intrusion detection` |
+| AND CAPTION | Optional keyword filter (leave blank to catch all) |
+| DO ACTION | `Write to Log` → `When event starts` |
+| Interval of Action | Once in 1 Min |
+
+**Result in Home Assistant:**
+- `event_type`: `intrusion`
+- `classification` and `area`: populated from the event caption
+
+---
+
+### Motion Detection (no Event Rule needed)
+
+Motion detection is configured at the camera level and does not require an Event Rule.
+
+1. Right-click the camera → **Camera Settings** → **Motion Detection** tab
+2. Enable motion detection and adjust sensitivity and detection regions
+
+Motion events are written to the log automatically.
+
+**Result in Home Assistant:**
+- `event_type`: `motion`
+
+---
+
+## Creating Alerts in Home Assistant
+
+Once NX Witness rules are logging events, you can trigger alerts in Home Assistant using the `binary_sensor.camera_name_event` sensors created by this integration. The sensor turns `on` for 30 seconds when an event is detected, then returns to `off`.
+
+> Replace `camera_name` in the examples below with your actual camera entity name (e.g. `binary_sensor.garage_event`), and `YOUR_PHONE` with your mobile app notify target (find it under **Settings → Devices & Services → Companion App**).
+
+---
+
+### Method 1: Single-Camera Automation
+
+Trigger a notification when a specific camera detects a Person:
+
+```yaml
+automation:
+  - alias: "NX Witness: Person detected"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.camera_name_event
+        to: "on"
+    condition:
+      - condition: template
+        value_template: "{{ state_attr('binary_sensor.camera_name_event', 'classification') == 'Person' }}"
+    action:
+      - service: notify.mobile_app_YOUR_PHONE
+        data:
+          title: "Security Alert"
+          message: >
+            Person detected
+            (Area: {{ state_attr('binary_sensor.camera_name_event', 'area') }})
+```
+
+Change the `classification` value to `Vehicle` or `Animal` to filter for those object types instead.
+
+---
+
+### Method 2: Multi-Camera Automation
+
+Watch several cameras at once and include the triggering camera in the message:
+
+```yaml
+automation:
+  - alias: "NX Witness: Person on any camera"
+    trigger:
+      - platform: state
+        entity_id:
+          - binary_sensor.camera_one_event
+          - binary_sensor.camera_two_event
+        to: "on"
+    condition:
+      - condition: template
+        value_template: "{{ state_attr(trigger.entity_id, 'classification') == 'Person' }}"
+    action:
+      - service: notify.mobile_app_YOUR_PHONE
+        data:
+          title: "Security Alert"
+          message: >
+            Person detected
+            (Camera: {{ trigger.entity_id }},
+             Area: {{ state_attr(trigger.entity_id, 'area') }})
+```
+
+---
+
+### Method 3: Persistent Alert (HA Alert Integration)
+
+For a repeating alert that stays visible in the Home Assistant UI until acknowledged, add the following to `configuration.yaml`:
+
+```yaml
+alert:
+  camera_person_alert:
+    name: "Person detected - Camera Name"
+    done_message: "All clear - Camera Name"
+    entity_id: binary_sensor.camera_name_event
+    state: "on"
+    repeat: 5
+    can_acknowledge: true
+    notifiers:
+      - mobile_app_YOUR_PHONE
+```
+
+Restart Home Assistant after saving. The alert will repeat every 5 minutes until the sensor turns `off` or it is acknowledged in the UI.
+
+---
+
 ## Changelog
+
+### 0.4.0
+- `analytics_attributes` attribute added to event sensors — exposes raw analytics data (e.g. `species`, `track_duration`) from `analyticsObject` events as a snake_case dict for use in HA templates
+- Fixed `_extract_object_class()` to correctly parse the `{name, value}` list format returned by the NX Witness API for analytics object attributes
 
 ### 0.3.2
 - `area` attribute now shows only the zone/rule name (e.g. `Front Yard Intrusion`) instead of the full caption string
@@ -115,7 +269,7 @@ automation:
 
 ## Version
 
-Current version: 0.3.2
+Current version: 0.4.0
 
 ## License
 
