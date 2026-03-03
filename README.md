@@ -243,6 +243,10 @@ Restart Home Assistant after saving. The alert will repeat every 5 minutes until
 
 ## Changelog
 
+### 0.4.0
+- `analytics_attributes` attribute added to event sensors — exposes raw analytics data (e.g. `species`, `track_duration`) from `analyticsObject` events as a snake_case dict for use in HA templates
+- Fixed `_extract_object_class()` to correctly parse the `{name, value}` list format returned by the NX Witness API for analytics object attributes
+
 ### 0.3.2
 - `area` attribute now shows only the zone/rule name (e.g. `Front Yard Intrusion`) instead of the full caption string
 - `classification` attribute now correctly extracted from caption format `Type - Class - Zone` (e.g. `Person`)
@@ -265,7 +269,7 @@ Restart Home Assistant after saving. The alert will repeat every 5 minutes until
 
 ## Version
 
-Current version: 0.3.2
+Current version: 0.4.0
 
 ## License
 
