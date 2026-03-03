@@ -93,6 +93,11 @@ automation:
 
 ## Changelog
 
+### 0.3.2
+- `area` attribute now shows only the zone/rule name (e.g. `Front Yard Intrusion`) instead of the full caption string
+- `classification` attribute now correctly extracted from caption format `Type - Class - Zone` (e.g. `Person`)
+- `event_type` now cleaned for third-party analytics events using `cvedia.rt.*` prefix (e.g. `intrusion` instead of `cvedia.rt.intrusion`)
+
 ### 0.3.1
 - Split intrusion event attributes into three distinct fields: `event_type`, `classification`, and `area`
 - `event_type` now reflects the actual NX Witness event type ID (e.g. `intrusion`, `motion`) rather than the zone caption
@@ -110,7 +115,7 @@ automation:
 
 ## Version
 
-Current version: 0.3.1
+Current version: 0.3.2
 
 ## License
 
