@@ -52,7 +52,7 @@ def _clean_event_type(raw_type: str) -> str:
         return "unknown"
     if raw_type in _EVENT_TYPE_MAP:
         return _EVENT_TYPE_MAP[raw_type]
-    for prefix in ("nx.analytics.", "nx.base.", "nx.stub.", "nx."):
+    for prefix in ("nx.analytics.", "nx.base.", "nx.stub.", "nx.", "cvedia.rt.", "cvedia."):
         if raw_type.startswith(prefix):
             raw_type = raw_type[len(prefix):]
             break
@@ -64,23 +64,29 @@ def _clean_event_type(raw_type: str) -> str:
 def _extract_object_class(event: dict[str, Any]) -> str | None:
     """Extract the detected object class from an analytics event."""
     event_data = event.get("eventData")
-    if not isinstance(event_data, dict):
-        return None
-    object_type_id = event_data.get("objectTypeId")
-    if isinstance(object_type_id, str) and object_type_id:
-        leaf = object_type_id.rsplit(".", 1)[-1]
-        if leaf:
-            return leaf
-    for field in ("objectType", "typeId", "objectClass"):
-        value = event_data.get(field)
-        if isinstance(value, str) and value:
-            return value
-    attributes = event_data.get("attributes")
-    if isinstance(attributes, dict):
-        for field in ("class", "objectClass", "type"):
-            value = attributes.get(field)
+    if isinstance(event_data, dict):
+        object_type_id = event_data.get("objectTypeId")
+        if isinstance(object_type_id, str) and object_type_id:
+            leaf = object_type_id.rsplit(".", 1)[-1]
+            if leaf:
+                return leaf
+        for field in ("objectType", "typeId", "objectClass"):
+            value = event_data.get(field)
             if isinstance(value, str) and value:
                 return value
+        attributes = event_data.get("attributes")
+        if isinstance(attributes, dict):
+            for field in ("class", "objectClass", "type"):
+                value = attributes.get(field)
+                if isinstance(value, str) and value:
+                    return value
+    # Fall back to the middle segment of a "Type - Class - Zone" caption
+    for source in (event, _event_payload(event)):
+        caption = source.get("caption")
+        if isinstance(caption, str) and caption.strip():
+            classification, _ = _parse_caption_parts(caption)
+            if classification:
+                return classification
     return None
 
 
@@ -147,12 +153,27 @@ def _extract_event_type_raw(event: dict[str, Any]) -> str:
     return "Unknown"
 
 
+def _parse_caption_parts(caption: str) -> tuple[str | None, str | None]:
+    """Split a caption like 'Type - Class - Zone Name' into (classification, zone).
+
+    Returns (None, caption) when the pattern doesn't match.
+    """
+    parts = [p.strip() for p in caption.split(" - ")]
+    if len(parts) >= 3:
+        # parts[0] = detection type (redundant with event_type), parts[1] = class, rest = zone
+        classification = parts[1] if parts[1] else None
+        zone = " - ".join(parts[2:])
+        return classification, zone
+    return None, caption.strip()
+
+
 def _extract_area(event: dict[str, Any]) -> str | None:
-    """Extract the area/zone/rule name from an event (typically the caption)."""
+    """Extract the zone/rule name from an event caption, stripping the leading type and class."""
     for source in (event, _event_payload(event)):
         value = source.get("caption")
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            _, zone = _parse_caption_parts(value)
+            return zone
     return None
 
 
