@@ -80,6 +80,16 @@ def _extract_object_class(event: dict[str, Any]) -> str | None:
                 value = attributes.get(field)
                 if isinstance(value, str) and value:
                     return value
+        elif isinstance(attributes, list):
+            attr_map = {
+                item["name"]: item.get("value")
+                for item in attributes
+                if isinstance(item, dict) and isinstance(item.get("name"), str)
+            }
+            for field in ("class", "objectClass", "type"):
+                value = attr_map.get(field)
+                if isinstance(value, str) and value:
+                    return value
     # Fall back to the middle segment of a "Type - Class - Zone" caption
     for source in (event, _event_payload(event)):
         caption = source.get("caption")
@@ -191,6 +201,29 @@ def _extract_event_name(event: dict[str, Any]) -> str:
     return "Unknown"
 
 
+def _extract_analytics_attributes(event: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract analytics attributes from eventData.attributes list.
+
+    NX Witness returns attributes as a list of {name, value} dicts.
+    Keys are normalised to snake_case so they are safe to use in templates.
+    Returns None when no attributes are present.
+    """
+    payload = _event_payload(event)
+    attributes = payload.get("attributes")
+    if not isinstance(attributes, list):
+        return None
+    result: dict[str, Any] = {}
+    for item in attributes:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        value = item.get("value")
+        if isinstance(name, str) and name.strip():
+            key = _camel_to_snake(name.strip()).replace(" ", "_")
+            result[key] = value
+    return result or None
+
+
 def _extract_event_timestamp_ms(event: dict[str, Any]) -> int:
     """Extract a best-effort detection timestamp from event payload."""
     payload = _event_payload(event)
@@ -296,6 +329,7 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         self._last_area: str | None = None
         self._last_event_description: str | None = None
         self._last_event_state: str | None = None
+        self._last_analytics_attributes: dict[str, Any] | None = None
 
     def _event_matches_sensor(self, event: dict[str, Any]) -> bool:
         """Return True when an event belongs to this camera sensor."""
@@ -333,6 +367,7 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
                 self._last_area = _extract_area(event)
                 self._last_event_description = _extract_event_description(event)
                 self._last_event_state = _extract_event_state(event)
+                self._last_analytics_attributes = _extract_analytics_attributes(event)
                 return True
 
         return False
@@ -359,5 +394,8 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
 
         if self._last_event_state:
             attrs["event_state"] = self._last_event_state
+
+        if self._last_analytics_attributes:
+            attrs["analytics_attributes"] = self._last_analytics_attributes
 
         return attrs
