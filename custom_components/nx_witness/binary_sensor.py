@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, EVENT_SENSOR_TIMEOUT
 from .coordinator import NXWitnessDataUpdateCoordinator
+from .utils import event_payload as _event_payload, extract_camera_id as _extract_camera_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,24 +121,6 @@ def _extract_event_state(event: dict[str, Any]) -> str:
         return "stopped"
     return "detected"
 
-
-def _event_payload(event: dict[str, Any]) -> dict[str, Any]:
-    """Return the nested event payload when available."""
-    nested = event.get("eventData")
-    if isinstance(nested, dict):
-        return nested
-    return event
-
-
-def _extract_camera_id(event: dict[str, Any]) -> str | None:
-    """Extract camera id from an event payload."""
-    payload = _event_payload(event)
-    for source in (payload, event):
-        for field in ("cameraId", "deviceId", "resourceId", "sourceId"):
-            value = source.get(field)
-            if isinstance(value, str) and value:
-                return value
-    return None
 
 
 def _extract_event_type_raw(event: dict[str, Any]) -> str:
@@ -333,17 +316,14 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         self._active_events: list[dict[str, Any]] = []
 
     def _event_matches_sensor(self, event: dict[str, Any]) -> bool:
-        """Return True when an event belongs to this camera sensor."""
-        event_camera_id = _extract_camera_id(event)
-        if event_camera_id != self._camera_id:
-            return False
+        """Return True when an event should trigger this sensor.
 
+        Camera filtering is already done via the events_by_camera index in the
+        coordinator, so only the event state needs to be checked here.
+        """
         # Most CV events report started/instant; ignore explicit stop states.
         event_state = str(_event_payload(event).get("state") or "").lower()
-        if event_state in {"stopped", "stop", "ended", "end"}:
-            return False
-
-        return True
+        return event_state not in {"stopped", "stop", "ended", "end"}
 
     @property
     def is_on(self) -> bool:
@@ -351,7 +331,7 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         if not self.coordinator.last_update_success:
             return False
 
-        events = self.coordinator.data.get("events", [])
+        events = self.coordinator.data.get("events_by_camera", {}).get(self._camera_id, [])
 
         now = datetime.now()
         cutoff_time_ms = int((now - timedelta(seconds=EVENT_SENSOR_TIMEOUT)).timestamp() * 1000)

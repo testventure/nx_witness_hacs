@@ -1,6 +1,5 @@
 """Config flow for NX Witness integration."""
 import logging
-import ssl
 from typing import Any
 
 import aiohttp
@@ -12,6 +11,7 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import DEFAULT_PORT, DOMAIN
 from .nx_client import NXWitnessClient
+from .utils import create_client_session, create_ssl_context
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,30 +48,14 @@ class NXWitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if ":" not in host.split("//")[1]:
                 host = f"{host}:{DEFAULT_PORT}"
 
-            # Create SSL context in executor to avoid blocking
-            def create_ssl_context():
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-                return ssl_context
-            
             ssl_context = await self.hass.async_add_executor_job(create_ssl_context)
-            
-            # Create connector with SSL disabled
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-            session = aiohttp.ClientSession(connector=connector)
-            
+            session = create_client_session(ssl_context)
             client = NXWitnessClient(host, username, password, session)
 
             try:
-                # Test connection
                 if await client.login():
-                    await session.close()
-                    
-                    # Create unique ID from host
                     await self.async_set_unique_id(host)
                     self._abort_if_unique_id_configured()
-
                     return self.async_create_entry(
                         title=f"NX Witness ({host})",
                         data={
@@ -80,15 +64,13 @@ class NXWitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_PASSWORD: password,
                         },
                     )
-                else:
-                    errors["base"] = "cannot_connect"
+                errors["base"] = "cannot_connect"
             except aiohttp.ClientError:
                 errors["base"] = "cannot_connect"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             finally:
-                # Clean up session
                 if not session.closed:
                     await session.close()
 

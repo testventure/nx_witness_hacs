@@ -1,15 +1,13 @@
 """DataUpdateCoordinator for NX Witness."""
 import logging
-import ssl
 from datetime import datetime, timedelta
-
-import aiohttp
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, EVENT_LOG_INTERVAL, UPDATE_INTERVAL
 from .nx_client import NXWitnessClient
+from .utils import create_client_session, create_ssl_context, extract_camera_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,41 +31,25 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
         self.cameras = []
         self.events = []
         self.last_camera_check = datetime.min
-        self.last_event_check = datetime.min
         self._session = None
-
-        # Keep the coordinator ticking fast enough for event sensors.
-        # Camera refresh is throttled separately via UPDATE_INTERVAL.
-        coordinator_interval = EVENT_LOG_INTERVAL
 
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=coordinator_interval),
+            update_interval=timedelta(seconds=EVENT_LOG_INTERVAL),
         )
 
     async def _async_setup(self):
         """Set up the coordinator with SSL context."""
-
-        def create_ssl_context():
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            return ssl_context
-
         ssl_context = await self.hass.async_add_executor_job(create_ssl_context)
-
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        self._session = aiohttp.ClientSession(connector=connector)
-
+        self._session = create_client_session(ssl_context)
         self.client = NXWitnessClient(
             self.host,
             self.username,
             self.password,
             self._session,
         )
-
         if not await self.client.login():
             raise UpdateFailed("Failed to login to NX Witness")
 
@@ -82,15 +64,27 @@ class NXWitnessDataUpdateCoordinator(DataUpdateCoordinator):
                     self.cameras = cameras
                 self.last_camera_check = now
 
-            if (now - self.last_event_check).total_seconds() >= EVENT_LOG_INTERVAL:
-                start_time_ms = int((now - timedelta(minutes=1)).timestamp() * 1000)
-                self.events = await self.client.get_event_log(start_time_ms)
-                self.last_event_check = now
+            start_time_ms = int((now - timedelta(minutes=1)).timestamp() * 1000)
+            self.events = await self.client.get_event_log(start_time_ms)
+
+            # Pre-index events by camera_id for O(1) sensor lookup
+            events_by_camera: dict[str, list] = {}
+            for ev in self.events:
+                cam_id = extract_camera_id(ev)
+                if cam_id:
+                    events_by_camera.setdefault(cam_id, []).append(ev)
 
             return {
                 "cameras": self.cameras,
                 "events": self.events,
+                "events_by_camera": events_by_camera,
             }
 
         except Exception as err:
             raise UpdateFailed(f"Error communicating with NX Witness: {err}") from err
+
+    async def async_shutdown(self) -> None:
+        """Clean up resources."""
+        await super().async_shutdown()
+        if self._session and not self._session.closed:
+            await self._session.close()
