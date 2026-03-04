@@ -330,6 +330,7 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         self._last_event_description: str | None = None
         self._last_event_state: str | None = None
         self._last_analytics_attributes: dict[str, Any] | None = None
+        self._active_events: list[dict[str, Any]] = []
 
     def _event_matches_sensor(self, event: dict[str, Any]) -> bool:
         """Return True when an event belongs to this camera sensor."""
@@ -355,22 +356,57 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
         now = datetime.now()
         cutoff_time_ms = int((now - timedelta(seconds=EVENT_SENSOR_TIMEOUT)).timestamp() * 1000)
 
+        # Collect ALL matching recent events so simultaneous alerts (e.g. an
+        # analyticsObject person-detection event AND a separate analytics
+        # intrusion-rule event arriving at the same time) are not silently
+        # dropped by an early return.
+        matching: list[tuple[int, dict[str, Any]]] = []
         for event in events:
             if not self._event_matches_sensor(event):
                 continue
-
             event_timestamp = _extract_event_timestamp_ms(event)
             if event_timestamp >= cutoff_time_ms:
-                self._last_detection_time = datetime.fromtimestamp(event_timestamp / 1000)
-                self._last_event_type_clean = _clean_event_type(_extract_event_type_raw(event))
-                self._last_classification = _extract_object_class(event)
-                self._last_area = _extract_area(event)
-                self._last_event_description = _extract_event_description(event)
-                self._last_event_state = _extract_event_state(event)
-                self._last_analytics_attributes = _extract_analytics_attributes(event)
-                return True
+                matching.append((event_timestamp, event))
 
-        return False
+        if not matching:
+            self._active_events = []
+            return False
+
+        # Most-recent event drives the primary sensor attributes.
+        matching.sort(key=lambda x: x[0], reverse=True)
+        best_ts, best_event = matching[0]
+
+        self._last_detection_time = datetime.fromtimestamp(best_ts / 1000)
+        self._last_event_type_clean = _clean_event_type(_extract_event_type_raw(best_event))
+        self._last_classification = _extract_object_class(best_event)
+        self._last_area = _extract_area(best_event)
+        self._last_event_description = _extract_event_description(best_event)
+        self._last_event_state = _extract_event_state(best_event)
+        self._last_analytics_attributes = _extract_analytics_attributes(best_event)
+
+        # Build a compact list of all concurrent events for templates/automations.
+        active: list[dict[str, Any]] = []
+        for ts_ms, event in matching:
+            entry: dict[str, Any] = {
+                "event_type": _clean_event_type(_extract_event_type_raw(event)),
+                "timestamp": datetime.fromtimestamp(ts_ms / 1000).isoformat(),
+            }
+            classification = _extract_object_class(event)
+            if classification:
+                entry["classification"] = classification
+            area = _extract_area(event)
+            if area:
+                entry["area"] = area
+            description = _extract_event_description(event)
+            if description:
+                entry["description"] = description
+            analytics_attrs = _extract_analytics_attributes(event)
+            if analytics_attrs:
+                entry["analytics_attributes"] = analytics_attrs
+            active.append(entry)
+        self._active_events = active
+
+        return True
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -397,5 +433,8 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
 
         if self._last_analytics_attributes:
             attrs["analytics_attributes"] = self._last_analytics_attributes
+
+        if len(self._active_events) > 1:
+            attrs["active_events"] = self._active_events
 
         return attrs
