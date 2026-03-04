@@ -72,6 +72,7 @@ Each camera gets a `binary_sensor` entity (e.g. `binary_sensor.camera_1_event`) 
 | `event_state` | `detected` | `detected` or `stopped` |
 | `event_description` | `Person detected on zone A` | Description from the event (if available) |
 | `last_detection` | `2026-03-02T10:00:00` | ISO timestamp of the last event |
+| `active_events` | `[{...}, {...}]` | List of all concurrent active events (only present when 2+ events fire at the same time for a camera) |
 
 ### Example Automation
 
@@ -243,6 +244,11 @@ Restart Home Assistant after saving. The alert will repeat every 5 minutes until
 
 ## Changelog
 
+### 0.4.1
+- **Bug fix:** When NX fires multiple rules simultaneously for the same camera (e.g. an `analyticsObject` person-tracking event and a separate `analytics` intrusion-rule event at the same time), the sensor now processes **all** of them instead of stopping at the first match
+- The most-recent event continues to drive the primary attributes (`event_type`, `classification`, `area`, etc.)
+- New `active_events` attribute: a list of all concurrent active events — useful in automations/templates when you need to check every alert type that fired at once (e.g. to confirm both a person was detected *and* an intrusion zone was triggered)
+
 ### 0.4.0
 - `analytics_attributes` attribute added to event sensors — exposes raw analytics data (e.g. `species`, `track_duration`) from `analyticsObject` events as a snake_case dict for use in HA templates
 - Fixed `_extract_object_class()` to correctly parse the `{name, value}` list format returned by the NX Witness API for analytics object attributes
@@ -269,7 +275,7 @@ Restart Home Assistant after saving. The alert will repeat every 5 minutes until
 
 ## Version
 
-Current version: 0.4.0
+Current version: 0.4.1
 
 ## License
 
