@@ -95,10 +95,12 @@ class NXWitnessCamera(CoordinatorEntity, Camera):
 
     async def stream_source(self) -> str:
         """Return the stream source."""
-        # Get a fresh ticket for streaming
-        ticket = await self.coordinator.client.get_ticket()
+        # Force a fresh session token, then a fresh ticket, every time the
+        # live view is requested. Stale tokens/tickets cause the live feed
+        # to silently fail to load.
+        ticket = await self.coordinator.client.get_ticket(force_new_token=True)
         if not ticket:
             _LOGGER.error("Failed to get ticket for stream")
             return None
-        
+
         return self.coordinator.client.get_camera_stream_url(self._camera_id, ticket)
