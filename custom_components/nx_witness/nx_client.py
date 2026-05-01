@@ -1,6 +1,7 @@
 """NX Witness REST API v4 Client."""
 import logging
 from typing import Any
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -110,9 +111,20 @@ class NXWitnessClient:
         _LOGGER.debug("Found %d cameras", len(cameras))
         return cameras
 
-    def get_camera_stream_url(self, camera_id: str, ticket: str) -> str:
-        """Get stream URL for a camera with ticket."""
-        return f"{self.host}/rest/v4/devices/{camera_id}/media?_ticket={ticket}"
+    async def get_camera_stream_url(self, camera_id: str) -> str | None:
+        """Build a stream URL with HTTP Basic auth embedded.
+
+        Uses NX's recommended scheme: userid `-` plus the session token as
+        the Basic password. The token is multi-use, so ffmpeg's probe +
+        open + reconnects all reuse it without needing a proxy.
+        """
+        if not self.token and not await self.login():
+            return None
+        split = urlsplit(self.host)
+        userinfo = f"-:{quote(self.token, safe='')}"
+        netloc = f"{userinfo}@{split.netloc}"
+        base = urlunsplit((split.scheme, netloc, split.path, "", ""))
+        return f"{base}/rest/v4/devices/{camera_id}/media"
 
     async def get_event_log(
         self,
