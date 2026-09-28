@@ -58,7 +58,6 @@ class NXWitnessCamera(CoordinatorEntity, Camera):
             name=self._attr_name,
             manufacturer="Network Optix",
             model=camera_data.get("model", "NX Camera"),
-            via_device=(DOMAIN, coordinator.host),
         )
 
     @property

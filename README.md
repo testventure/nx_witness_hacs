@@ -244,6 +244,9 @@ Restart Home Assistant after saving. The alert will repeat every 5 minutes until
 
 ## Changelog
 
+### 0.4.3
+- Fix cameras and event sensors failing to load on recent Home Assistant releases, which now reject the deprecated `via_device` device-info field
+
 ### 0.4.2
 - Internal refactor: shared SSL context and event helpers extracted into `utils.py` — eliminates duplicated SSL setup code across config flow and coordinator
 - API client consolidated into a single `_request()` helper with automatic token refresh on 401, replacing four near-identical retry blocks
@@ -281,7 +284,7 @@ Restart Home Assistant after saving. The alert will repeat every 5 minutes until
 
 ## Version
 
-Current version: 0.4.2
+Current version: 0.4.3
 
 ## License
 

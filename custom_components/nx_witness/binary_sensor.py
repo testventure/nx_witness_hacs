@@ -303,7 +303,6 @@ class NXWitnessEventSensor(CoordinatorEntity, BinarySensorEntity):
             identifiers={(DOMAIN, camera_id)},
             name=camera_name,
             manufacturer="Network Optix",
-            via_device=(DOMAIN, coordinator.host),
         )
 
         self._last_detection_time: datetime | None = None
