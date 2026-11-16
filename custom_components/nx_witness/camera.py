@@ -25,11 +25,27 @@ async def async_setup_entry(
     """Set up NX Witness cameras."""
     coordinator: NXWitnessDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    cameras = []
-    for camera_data in coordinator.data.get("cameras", []):
-        cameras.append(NXWitnessCamera(coordinator, camera_data, entry.entry_id))
+    known_camera_ids: set[str] = set()
 
-    async_add_entities(cameras)
+    def _new_cameras() -> list["NXWitnessCamera"]:
+        cameras = []
+        for camera_data in coordinator.data.get("cameras", []):
+            camera_id = camera_data.get("id")
+            if not camera_id or camera_id in known_camera_ids:
+                continue
+            known_camera_ids.add(camera_id)
+            cameras.append(NXWitnessCamera(coordinator, camera_data, entry.entry_id))
+        return cameras
+
+    async_add_entities(_new_cameras())
+
+    def _handle_coordinator_update() -> None:
+        # e.g. cameras that arrive with a newly merged server
+        if cameras := _new_cameras():
+            _LOGGER.debug("Adding %d new cameras", len(cameras))
+            async_add_entities(cameras)
+
+    entry.async_on_unload(coordinator.async_add_listener(_handle_coordinator_update))
 
 
 class NXWitnessCamera(CoordinatorEntity, Camera):
@@ -79,16 +95,16 @@ class NXWitnessCamera(CoordinatorEntity, Camera):
     ) -> bytes | None:
         """Return a still image from the camera."""
         try:
-            # Get a ticket for this request
-            ticket = await self.coordinator.client.get_ticket()
-            if not ticket:
+            # Ticket from the server that owns the camera (falls back to the
+            # connected server, which proxies within a merged system).
+            minted = await self.coordinator.async_camera_ticket(self._camera_id)
+            if minted is None:
                 _LOGGER.error("Failed to get ticket for camera image")
                 return None
-            
-            # Get snapshot URL with ticket
-            url = f"{self.coordinator.host}/rest/v4/devices/{self._camera_id}/image?_ticket={ticket}"
-            
-            async with self.coordinator.client.session.get(url) as response:
+            client, ticket = minted
+            url = client.get_camera_image_url(self._camera_id, ticket)
+
+            async with client.session.get(url) as response:
                 if response.status == 200:
                     return await response.read()
                 _LOGGER.error("Failed to get camera image, status: %s", response.status)
@@ -99,10 +115,10 @@ class NXWitnessCamera(CoordinatorEntity, Camera):
     async def stream_source(self) -> str | None:
         """Return the stream source.
 
-        NX tickets are single-use, but ffmpeg/Stream opens the source URL
+        NX tickets are single-use, but ffmpeg/go2rtc open the source URL
         more than once (probe + read + reconnects). We return a URL served
         by NXWitnessStreamView, which mints a fresh ticket per request and
-        302-redirects to the real NX media URL.
+        relays the media from whichever server owns the camera.
         """
         base = get_url(self.hass, allow_internal=True, prefer_external=False)
         path = stream_path_for(
