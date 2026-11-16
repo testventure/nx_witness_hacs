@@ -7,3 +7,4 @@ UPDATE_INTERVAL = 30  # seconds - how often to refresh camera list
 EVENT_LOG_INTERVAL = 5  # seconds - how often to check event log
 EVENT_SENSOR_TIMEOUT = 30  # seconds - how long to keep sensor "on" after detection
 SERVER_RETRY_INTERVAL = 300  # seconds - back-off before retrying an unreachable server
+STREAM_FORMAT = "mpegts"  # go2rtc cannot demux NX's default (mkv)

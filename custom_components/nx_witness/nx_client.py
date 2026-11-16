@@ -4,6 +4,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import STREAM_FORMAT
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -143,8 +145,15 @@ class NXWitnessClient:
         ]
 
     def get_camera_stream_url(self, camera_id: str, ticket: str) -> str:
-        """Get stream URL for a camera with ticket."""
-        return f"{self.host}/rest/v4/devices/{camera_id}/media?_ticket={ticket}"
+        """Get stream URL for a camera with ticket.
+
+        NX defaults to Matroska, which go2rtc's HTTP source can't demux
+        ("magic: unsupported header: 1a45dfa3"); MPEG-TS is supported.
+        """
+        return (
+            f"{self.host}/rest/v4/devices/{camera_id}/media"
+            f"?format={STREAM_FORMAT}&_ticket={ticket}"
+        )
 
     def get_camera_image_url(self, camera_id: str, ticket: str) -> str:
         """Get snapshot URL for a camera with ticket."""
